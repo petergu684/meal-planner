@@ -1,0 +1,14 @@
+# Data directory (database, uploaded images, backups)
+data/
+
+# Environment config (contains secrets/tokens)
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Task/spec files (development notes)
+TASK.md
+SPEC.md
