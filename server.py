@@ -145,7 +145,9 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 # Utility: resize image
 # ---------------------------------------------------------------------------
 def resize_image(data: bytes, max_dim: int = MAX_IMAGE_DIM) -> bytes:
+    from PIL import ImageOps
     img = Image.open(BytesIO(data))
+    img = ImageOps.exif_transpose(img)  # Apply EXIF rotation (iPhone photos)
     if img.mode in ("RGBA", "P"):
         img = img.convert("RGB")
     w, h = img.size
@@ -1215,7 +1217,7 @@ input, select, textarea { font: inherit; }
     -webkit-appearance: none;
 }
 .form-input:focus { outline: none; border-color: var(--primary); }
-textarea.form-input { min-height: 80px; resize: vertical; }
+textarea.form-input { min-height: 150px; max-height: 50vh; resize: vertical; overflow-y: auto; }
 
 .image-upload-area {
     border: 2px dashed var(--border);
@@ -1652,10 +1654,30 @@ textarea.form-input { min-height: 80px; resize: vertical; }
 
 /* Servings overlay */
 .servings-overlay-body {
-    padding: 24px 16px;
-    text-align: center;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
 }
-.servings-overlay-body h4 { font-size: 16px; margin-bottom: 16px; }
+.servings-overlay-body h4 { font-size: 16px; margin-bottom: 12px; text-align: center; }
+.servings-notes {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: var(--bg);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 16px;
+    max-height: calc(1.5em * 15 + 24px); /* 15 lines + padding */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+.servings-controls {
+    text-align: center;
+    flex-shrink: 0;
+}
 .servings-stepper {
     display: flex;
     align-items: center;
@@ -1888,7 +1910,7 @@ textarea.form-input { min-height: 80px; resize: vertical; }
         </div>
         <div class="form-group">
             <label class="form-label">Notes (optional)</label>
-            <textarea class="form-input" id="dishNotes" placeholder="Cooking instructions, air fryer temp, etc."></textarea>
+            <textarea class="form-input" id="dishNotes" placeholder="Cooking instructions, air fryer temp, etc." oninput="autoResizeTextarea(this)"></textarea>
             <div class="note-images-section" id="noteImagesSection" style="display:none;">
                 <div class="note-images-grid" id="noteImagesGrid"></div>
             </div>
@@ -1995,13 +2017,16 @@ textarea.form-input { min-height: 80px; resize: vertical; }
         </div>
         <div class="servings-overlay-body">
             <h4 id="servingsDishName"></h4>
-            <div class="servings-stepper">
-                <button onclick="adjustServings(-1)">&minus;</button>
-                <span class="servings-val" id="servingsVal">2</span>
-                <button onclick="adjustServings(1)">+</button>
+            <div id="servingsNotes" class="servings-notes" style="display:none;"></div>
+            <div class="servings-controls">
+                <div class="servings-stepper">
+                    <button onclick="adjustServings(-1)">&minus;</button>
+                    <span class="servings-val" id="servingsVal">2</span>
+                    <button onclick="adjustServings(1)">+</button>
+                </div>
+                <button class="btn-primary" onclick="confirmServings()" id="servingsConfirmBtn">Add to Plan</button>
+                <button class="btn-danger" id="servingsRemoveBtn" style="display:none;" onclick="removePlannedDish()">Remove from Plan</button>
             </div>
-            <button class="btn-primary" onclick="confirmServings()" id="servingsConfirmBtn">Add to Plan</button>
-            <button class="btn-danger" id="servingsRemoveBtn" style="display:none;" onclick="removePlannedDish()">Remove from Plan</button>
         </div>
     </div>
 </div>
@@ -2560,6 +2585,7 @@ async function loadDishForEdit(id) {
         const dish = await res.json();
         document.getElementById('dishName').value = dish.name;
         document.getElementById('dishNotes').value = dish.notes || '';
+        autoResizeTextarea(document.getElementById('dishNotes'));
         document.getElementById('dishImage').value = '';
 
         if (dish.image_path) {
@@ -2620,6 +2646,12 @@ function getIngredients() {
         }
     });
     return ings;
+}
+
+function autoResizeTextarea(el) {
+    el.style.height = 'auto';
+    const maxH = window.innerHeight * 0.5;
+    el.style.height = Math.min(el.scrollHeight, maxH) + 'px';
 }
 
 function previewImage(input) {
@@ -3309,6 +3341,29 @@ function filterPicker() {
     renderPickerGrid(filtered);
 }
 
+async function loadDishNotes(dishId) {
+    const notesEl = document.getElementById('servingsNotes');
+    notesEl.style.display = 'none';
+    notesEl.textContent = '';
+    try {
+        const dish = allDishes.find(d => d.id === dishId);
+        if (dish && dish.notes) {
+            notesEl.textContent = dish.notes;
+            notesEl.style.display = '';
+        } else {
+            // Fetch if not in local cache
+            const res = await fetch('/api/dishes/' + dishId);
+            if (res.ok) {
+                const d = await res.json();
+                if (d.notes) {
+                    notesEl.textContent = d.notes;
+                    notesEl.style.display = '';
+                }
+            }
+        }
+    } catch(e) {}
+}
+
 function pickDish(dishId, dishName) {
     // Don't close picker — hide it behind servings overlay
     servingsDishId = dishId;
@@ -3320,6 +3375,7 @@ function pickDish(dishId, dishName) {
     document.getElementById('servingsRemoveBtn').style.display = 'none';
     document.getElementById('servingsBackBtn').style.display = '';
     document.getElementById('servingsOverlay').classList.add('open');
+    loadDishNotes(dishId);
 }
 
 function editPlannedDish(planId, dishId, dishName, servings, version) {
@@ -3333,8 +3389,8 @@ function editPlannedDish(planId, dishId, dishName, servings, version) {
     document.getElementById('servingsRemoveBtn').style.display = 'block';
     document.getElementById('servingsBackBtn').style.display = 'none';
     document.getElementById('servingsOverlay').classList.add('open');
-    // Store version for optimistic concurrency
     servingsOverlayVersion = version;
+    loadDishNotes(dishId);
 }
 
 var servingsOverlayVersion = null;
