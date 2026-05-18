@@ -2,6 +2,8 @@
 
 A self-hosted weekly meal planning and grocery shopping web app. Built as a single-file Python server (FastAPI) with a mobile-first UI.
 
+> 💡 **Companion project:** Pair this with **[eink-meal-display](https://github.com/petergu684/meal-planner-eink-display)** to put your weekly plan on a battery-powered e-ink screen on your fridge. The display reads this app's SQLite database directly — no extra integration needed beyond pointing it at `data/meal_planner.db`.
+
 ## Features
 
 - **Dish Library** — Add dishes with ingredients (per-person amounts), photos, notes, and tags. Sorted by Pinyin for Chinese dish names.
@@ -195,6 +197,20 @@ All endpoints are at `/api/`:
 | `/api/cart` | GET | Shared guest cart |
 | `/api/cart/update` | POST | Update shared cart |
 | `/api/grocery/check` | POST | Toggle grocery checklist item |
+
+## E-Ink Display Integration
+
+You can mirror the current week's meal plan onto a battery-powered e-paper display on your fridge using the companion repo **[eink-meal-display](https://github.com/wenhao-anthropic/eink-meal-display)**. It runs an HTTP image server alongside this one — the e-paper device wakes once a day, pulls a rendered PNG of the plan, and goes back to deep sleep.
+
+The integration is just a shared SQLite file. After setting up meal-planner:
+
+```bash
+# In the eink-meal-display repo, point its image server at this DB:
+export MEAL_PLANNER_DB=/absolute/path/to/meal-planner/data/meal_planner.db
+python3 eink-meal-display/sender/image_server.py
+```
+
+SQLite handles concurrent readers + a single writer correctly, so both servers can run side-by-side without contention. See the [eink-meal-display README](https://github.com/wenhao-anthropic/eink-meal-display#readme) for hardware details and ESP32 firmware setup.
 
 ## License
 
