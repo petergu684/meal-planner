@@ -1,5 +1,6 @@
 # Data directory (database, uploaded images, backups)
 data/
+data-test/
 
 # Environment config (contains secrets/tokens)
 .env

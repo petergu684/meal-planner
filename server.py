@@ -1674,6 +1674,18 @@ textarea.form-input { min-height: 150px; max-height: 50vh; resize: vertical; ove
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
 }
+.servings-note-images {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+.servings-note-img {
+    width: 72px; height: 72px;
+    border-radius: 8px;
+    object-fit: cover;
+    cursor: pointer;
+}
 .servings-controls {
     text-align: center;
     flex-shrink: 0;
@@ -2018,6 +2030,7 @@ textarea.form-input { min-height: 150px; max-height: 50vh; resize: vertical; ove
         <div class="servings-overlay-body">
             <h4 id="servingsDishName"></h4>
             <div id="servingsNotes" class="servings-notes" style="display:none;"></div>
+            <div id="servingsNoteImages" class="servings-note-images" style="display:none;"></div>
             <div class="servings-controls">
                 <div class="servings-stepper">
                     <button onclick="adjustServings(-1)">&minus;</button>
@@ -3341,25 +3354,39 @@ function filterPicker() {
     renderPickerGrid(filtered);
 }
 
+let servingsNoteImgs = [];  // note images for the popup viewer
+
 async function loadDishNotes(dishId) {
     const notesEl = document.getElementById('servingsNotes');
+    const imgsEl = document.getElementById('servingsNoteImages');
     notesEl.style.display = 'none';
     notesEl.textContent = '';
+    imgsEl.style.display = 'none';
+    imgsEl.innerHTML = '';
+    servingsNoteImgs = [];
+
     try {
-        const dish = allDishes.find(d => d.id === dishId);
-        if (dish && dish.notes) {
+        let dish = allDishes.find(d => d.id === dishId);
+        // Always fetch full dish to get note_images
+        if (!dish || !dish.note_images) {
+            const res = await fetch('/api/dishes/' + dishId);
+            if (res.ok) dish = await res.json();
+        }
+        if (!dish) return;
+
+        if (dish.notes) {
             notesEl.textContent = dish.notes;
             notesEl.style.display = '';
-        } else {
-            // Fetch if not in local cache
-            const res = await fetch('/api/dishes/' + dishId);
-            if (res.ok) {
-                const d = await res.json();
-                if (d.notes) {
-                    notesEl.textContent = d.notes;
-                    notesEl.style.display = '';
-                }
-            }
+        }
+
+        if (dish.note_images && dish.note_images.length > 0) {
+            servingsNoteImgs = dish.note_images;
+            imgsEl.innerHTML = dish.note_images.map((ni, i) =>
+                '<img class="servings-note-img" src="/' + ni.image_path + '" onclick="openNoteImgPopup(' + i + ')">'
+            ).join('');
+            imgsEl.style.display = 'flex';
+            // Sync with the popup viewer's image list
+            currentNoteImages = dish.note_images;
         }
     } catch(e) {}
 }
@@ -4097,7 +4124,7 @@ button { cursor: pointer; border: none; background: none; font: inherit; }
     <span class="search-icon">&#128269;</span>
     <input type="text" placeholder="Search dishes..." id="menuSearchInput" oninput="filterMenu()">
 </div>
-<div class="menu-tag-filters" id="menuTagFilters" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 16px 0;"></div>
+<div class="menu-tag-filters" id="menuTagFilters" style="display:flex;gap:6px;flex-wrap:wrap;padding:8px 16px 0;justify-content:center;"></div>
 
 <div class="menu-container">
     <div class="menu-grid" id="menuGrid"></div>
