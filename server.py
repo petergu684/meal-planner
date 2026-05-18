@@ -4597,7 +4597,9 @@ connectCartSSE();
 </body>
 </html>"""
 
-ADMIN_BASE = "/kitchen-admin-7x9k"
+ADMIN_BASE = os.environ.get("MEAL_PLANNER_ADMIN_PATH", "/admin")
+if not ADMIN_BASE.startswith("/"):
+    ADMIN_BASE = "/" + ADMIN_BASE
 
 
 @app.get(ADMIN_BASE, response_class=HTMLResponse)

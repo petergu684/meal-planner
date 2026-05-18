@@ -11,7 +11,7 @@ A self-hosted weekly meal planning and grocery shopping web app. Built as a sing
 - **Guest Menu** — A separate shareable page where friends can browse your dishes and add to a shared cart before visiting. Isolated from admin pages.
 - **Tag System** — Organize dishes by tags, filter in all views. Control which tags appear on the guest menu.
 - **Note Images** — Attach reference photos to dishes (recipe screenshots, plating ideas). Swipe through in enlarged view.
-- **Daily Reminders** — Optional nightly notification with tomorrow's dishes and defrost reminders. Includes a WeChat bot notification script (requires WeChat bot credentials).
+- **Daily Reminders** — Optional nightly notification with tomorrow's dishes and defrost reminders. Posts to Discord via a bot (requires a bot token and channel ID).
 - **Auto Backup** — Database backed up every 30 minutes (only when changed), with rotation.
 
 ## Requirements
@@ -26,14 +26,22 @@ pip install fastapi uvicorn aiofiles aiosqlite python-multipart Pillow pypinyin
 
 # 2. Copy and edit config
 cp .env.example .env
-# Edit .env with your preferred data directory and port
+# At a minimum, set MEAL_PLANNER_ADMIN_PATH to a hard-to-guess value
+# (this is the only gate protecting the admin UI).
 
 # 3. Run
+set -a; source .env; set +a   # export vars for this shell
 python server.py
 # → http://localhost:8091
 ```
 
-The guest menu is at `/menu`.
+URLs:
+
+- **Admin** (dish library, planner, grocery): `http://localhost:8091<MEAL_PLANNER_ADMIN_PATH>`
+- **Guest menu** (shareable, read-only browse + cart): `http://localhost:8091/menu`
+- The root path `/` returns an empty page on purpose, so the admin URL stays unadvertised.
+
+> ⚠️ **The admin path is your only access control.** Anyone who knows it can edit everything. Pick a long, random value (e.g. `/admin-9f3k2x`) and treat it like a password. Do **not** commit your real `.env`.
 
 ## Project Structure
 
@@ -60,8 +68,18 @@ All configuration is via environment variables (set in `.env` or export directly
 |----------|---------|-------------|
 | `MEAL_PLANNER_DATA` | `./data` | Directory for database, uploads, and backups |
 | `MEAL_PLANNER_PORT` | `8091` | Server port |
-| `WECHAT_TARGET` | *(none)* | WeChat user ID for daily reminders (optional) |
-| `WECHAT_ACCOUNT_FILE` | *(none)* | Path to WeChat account credentials (optional) |
+| `MEAL_PLANNER_ADMIN_PATH` | `/admin` | Secret URL path for the admin SPA — change this |
+| `MEAL_PLANNER_URL` | `http://localhost:8091` | Used by `remind.sh` to reach the running server |
+| `DISCORD_BOT_TOKEN` | *(none)* | Bot token for the daily reminder (optional) |
+| `DISCORD_CHANNEL_ID` | *(none)* | Channel ID the reminder posts to (optional) |
+
+### Setting up the Discord reminder (optional)
+
+1. Create an application at <https://discord.com/developers/applications>, add a Bot, and copy the **Bot Token**.
+2. Under **OAuth2 → URL Generator**, pick the `bot` scope and the `Send Messages` permission, then open the generated URL to invite the bot to your server.
+3. In Discord, enable **Settings → Advanced → Developer Mode**, then right-click your target channel → **Copy Channel ID**.
+4. Put both values into `.env` as `DISCORD_BOT_TOKEN` and `DISCORD_CHANNEL_ID`.
+5. Test it: `./remind.sh` — you should see an HTTP `200` line and a message in the channel.
 
 ## Systemd Setup (Auto-start)
 
@@ -128,13 +146,27 @@ Persistent=true
 WantedBy=timers.target
 ```
 
+```ini
+# ~/.config/systemd/user/meal-reminder.service
+[Unit]
+Description=Meal Planner Daily Reminder
+
+[Service]
+Type=oneshot
+EnvironmentFile=/path/to/meal-planner/.env
+ExecStart=/path/to/meal-planner/remind.sh
+```
+
 Enable everything:
 
 ```bash
 systemctl --user daemon-reload
 systemctl --user enable --now meal-planner.service
 systemctl --user enable --now meal-planner-backup.timer
-systemctl --user enable --now meal-reminder.timer  # optional, needs WeChat config
+systemctl --user enable --now meal-reminder.timer  # optional, needs Discord config
+# If using user-level systemd without a login session, also run:
+#   loginctl enable-linger $USER
+# so timers keep firing after you log out.
 ```
 
 ## Smart Defaults
