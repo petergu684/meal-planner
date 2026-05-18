@@ -1082,6 +1082,118 @@ input, select, textarea { font: inherit; }
     display: flex; align-items: center; justify-content: space-between;
 }
 .home-week-body { padding: 8px; }
+.settings-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    cursor: pointer;
+}
+.settings-row:active { background: var(--bg); }
+.settings-row-main {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+}
+.settings-row-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--primary-light);
+    color: var(--primary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.settings-row-title {
+    display: block;
+    font-size: 14px;
+    font-weight: 700;
+}
+.settings-row-subtitle {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.settings-row-chevron {
+    color: var(--text-secondary);
+    font-size: 24px;
+    line-height: 1;
+}
+.info-panel {
+    background: var(--card);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    padding: 16px;
+    margin-bottom: 12px;
+}
+.info-panel h2 {
+    font-size: 18px;
+    margin-bottom: 6px;
+}
+.info-panel p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.4;
+}
+.tag-visibility-list {
+    background: var(--card);
+    border-radius: var(--radius-sm);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+}
+.tag-visibility-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+}
+.tag-visibility-row:last-child { border-bottom: none; }
+.tag-visibility-main {
+    flex: 1;
+    min-width: 0;
+}
+.tag-visibility-name {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.tag-visibility-count {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.tag-visibility-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.tag-visibility-toggle input {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+.tag-visibility-empty {
+    padding: 16px;
+    color: var(--text-secondary);
+    font-size: 14px;
+}
 .home-day-row {
     display: flex;
     align-items: flex-start;
@@ -1891,11 +2003,26 @@ textarea.form-input { min-height: 150px; max-height: 50vh; resize: vertical; ove
         <div id="cartGroceryModal" style="display:none;padding:12px 16px;border-top:1px solid var(--border);"></div>
     </div>
     <div class="home-week-preview">
-        <div class="home-week-header">
-            <span>🏷️ Tag Management</span>
-        </div>
-        <div id="tagManageBody" style="padding:8px 0;"></div>
+        <button class="settings-row" onclick="navigate('menu-filters')">
+            <span class="settings-row-main">
+                <span class="settings-row-icon">&#127991;</span>
+                <span>
+                    <span class="settings-row-title">Guest Menu Filters</span>
+                    <span class="settings-row-subtitle">Choose which tag filters guests can use</span>
+                </span>
+            </span>
+            <span class="settings-row-chevron">&#8250;</span>
+        </button>
     </div>
+</div>
+
+<!-- GUEST MENU FILTERS -->
+<div class="page" id="page-menu-filters">
+    <div class="info-panel">
+        <h2>Guest Menu Filters</h2>
+        <p>Choose which tags guests can use to filter the shared menu. This does not hide dishes; it only controls which filter chips appear on the guest menu.</p>
+    </div>
+    <div class="tag-visibility-list" id="tagManageBody"></div>
 </div>
 
 <!-- DISHES -->
@@ -2120,6 +2247,12 @@ function navigate(page, param) {
             document.querySelector('[data-tab="home"]').classList.add('active');
             loadHomePage();
             break;
+        case 'menu-filters':
+            document.getElementById('page-menu-filters').classList.add('active');
+            navTitle.textContent = 'Guest Menu Filters';
+            backTarget = 'home';
+            loadTagManagement();
+            break;
         case 'dishes':
             document.getElementById('page-dishes').classList.add('active');
             navTitle.textContent = 'Dish Library';
@@ -2322,7 +2455,6 @@ function copyMenuLink() {
 async function loadHomePage() {
     loadSharedCart();
     connectAdminCartSSE();
-    loadTagManagement();
 }
 
 let adminCartData = {};  // {id: {dish_name, qty}}
@@ -2453,18 +2585,22 @@ async function loadTagManagement() {
         const res = await fetch('/api/tags');
         const tags = await res.json();
         const body = document.getElementById('tagManageBody');
+        if (!body) return;
         if (!tags.length) {
-            body.innerHTML = '<div style="padding:8px 16px;opacity:0.5;font-size:14px;">No tags yet. Create tags when adding dishes.</div>';
+            body.innerHTML = '<div class="tag-visibility-empty">No tags yet. Add tags to dishes first, then choose which ones guests can filter by.</div>';
             return;
         }
         let html = '';
         for (const t of tags) {
             const checked = t.visible_in_menu ? 'checked' : '';
-            html += '<div style="display:flex;align-items:center;padding:8px 16px;border-bottom:1px solid var(--border);">';
-            html += '<span style="flex:1;font-weight:600;font-size:14px;">' + escapeHtml(t.name) + '</span>';
-            html += '<span style="font-size:12px;opacity:0.5;margin-right:12px;">' + t.dish_count + ' dish' + (t.dish_count !== 1 ? 'es' : '') + '</span>';
-            html += '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;">';
-            html += '<input type="checkbox" ' + checked + ' onchange="toggleTagMenu(' + t.id + ', this.checked)" style="width:18px;height:18px;cursor:pointer;"> Menu';
+            const dishLabel = t.dish_count + ' dish' + (t.dish_count !== 1 ? 'es' : '');
+            html += '<div class="tag-visibility-row">';
+            html += '<div class="tag-visibility-main">';
+            html += '<div class="tag-visibility-name">' + escapeHtml(t.name) + '</div>';
+            html += '<div class="tag-visibility-count">Used on ' + dishLabel + '</div>';
+            html += '</div>';
+            html += '<label class="tag-visibility-toggle">';
+            html += '<input type="checkbox" ' + checked + ' onchange="toggleTagMenu(' + t.id + ', this.checked)"> Show filter';
             html += '</label>';
             html += '</div>';
         }
